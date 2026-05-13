@@ -1,4 +1,4 @@
-#include "epoll_handler.h"
+#include "epollHandler.h"
 
 #define PORT 3344
 #define MAX_EVENTS 64
@@ -49,11 +49,15 @@ int init_epoll(int server_fd) {
         exit(1);
     }
 
+    struct Connection *server = malloc(sizeof(struct Connection));
+    server->type = EV_SERVER;
+    server->fd = server_fd;
+
     struct epoll_event event;
     event.events = EPOLLIN;
-    event.data.fd = server_fd;
+    event.data.ptr = server;
 
-    if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, server_fd, &event) == -1) {
+    if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, server->fd, &event) == -1) {
         perror("epoll_ctl server_fd");
         exit(1);
     }
@@ -63,7 +67,7 @@ int init_epoll(int server_fd) {
     return epoll_fd;
 }
 
-int epoll_handler(int server_fd, int epoll_fd) {
+int epoll_handler(int epoll_fd) {
     struct epoll_event events[MAX_EVENTS];
 
     int n = epoll_wait(epoll_fd, events, MAX_EVENTS, 100);
@@ -75,11 +79,12 @@ int epoll_handler(int server_fd, int epoll_fd) {
         return 0;
 
     for (int i = 0; i < n; i++) {
-        int fd = events[i].data.fd;
+        //int fd = events[i].data.fd;
+        struct Connection *conn = events[i].data.ptr;
 
-        if (fd == server_fd) {
+        if (conn->type == EV_SERVER) {
             while (1) {
-                int client_fd = accept(server_fd, NULL, NULL);
+                int client_fd = accept(conn->fd, NULL, NULL);
 
                 if (client_fd == -1) {
                     if (errno == EAGAIN || errno == EWOULDBLOCK) {
@@ -92,40 +97,66 @@ int epoll_handler(int server_fd, int epoll_fd) {
 
                 set_nonblocking(client_fd);
 
+                struct MQTTClient *client = malloc(sizeof(struct MQTTClient));
+
+                client->fd = client_fd;
+                client->type = EV_CLIENT;
+                client->in_len = 0;
+                client->out_len = 0;
+                client->out_sent = 0;
+
                 struct epoll_event client_event;
                 client_event.events = EPOLLIN | EPOLLET;
-                client_event.data.fd = client_fd;
+                client_event.data.ptr = client;
 
                 if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, client_fd, &client_event) == -1) {
                     perror("epoll_ctl client_fd");
                     close(client_fd);
+                    free(client);
                 }
 
-                printf("Client connected: fd=%d\n", client_fd);
+                printf("[%s] Client connected: fd=%d\n", __func__, client_fd);
             }
         } else {
-            char buf[BUF_SIZE];
-
             while (1) {
-                ssize_t count = read(fd, buf, sizeof(buf));
+                struct MQTTClient *client = (struct MQTTClient *)conn;
 
+                if (client->in_len >= sizeof(client->inbuf)) {
+                    printf("[%s] Overflow! Client disconnected: fd=%d\n", __func__, client->fd);
+                    close(client->fd);
+                    free(client);
+                    break;
+                }
+
+                ssize_t count = read(client->fd, client->inbuf + client->in_len, sizeof(client->inbuf) - client->in_len);
+                
                 if (count == -1) {
                     if (errno == EAGAIN || errno == EWOULDBLOCK) {
                         break;
                     }
 
                     perror("read");
-                    close(fd);
+                    close(client->fd);
+                    free(client);
                     break;
                 }
 
                 if (count == 0) {
-                    printf("[%s] Client disconnected: fd=%d\n", __func__, fd);
-                    close(fd);
+                    printf("[%s] Client disconnected: fd=%d\n", __func__, client->fd);
+                    close(client->fd);
+                    free(client);
                     break;
                 }
 
-                write(fd, buf, count);
+                client->in_len += count;
+
+                // count = write(client->fd, client->inbuf, client->in_len);
+
+                // if (count > 0) {
+                //     memmove(client->inbuf, client->inbuf + count, client->in_len - count);
+                //     client->in_len -= count;
+                // }
+
             }
         }
     }
