@@ -10,4 +10,4 @@
 
 int init_server_socket();
 int init_epoll(int server_fd);
-int epoll_handler();
+int epoll_handler(int server_fd, int epoll_fd);

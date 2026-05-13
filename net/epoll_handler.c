@@ -63,77 +63,72 @@ int init_epoll(int server_fd) {
     return epoll_fd;
 }
 
-int epoll_handler() {
-    int server_fd = init_server_socket();
-    int epoll_fd = init_epoll(server_fd);
-
+int epoll_handler(int server_fd, int epoll_fd) {
     struct epoll_event events[MAX_EVENTS];
 
-    while (1) {
-        int n = epoll_wait(epoll_fd, events, MAX_EVENTS, -1);
-        if (n == -1) {
-            perror("epoll_wait");
-            break;
-        }
+    int n = epoll_wait(epoll_fd, events, MAX_EVENTS, 100);
+    if (n == -1) {
+        perror("epoll_wait");
+        return -1;
+    }
+    else if (n == 0)
+        return 0;
 
-        for (int i = 0; i < n; i++) {
-            int fd = events[i].data.fd;
+    for (int i = 0; i < n; i++) {
+        int fd = events[i].data.fd;
 
-            if (fd == server_fd) {
-                while (1) {
-                    int client_fd = accept(server_fd, NULL, NULL);
+        if (fd == server_fd) {
+            while (1) {
+                int client_fd = accept(server_fd, NULL, NULL);
 
-                    if (client_fd == -1) {
-                        if (errno == EAGAIN || errno == EWOULDBLOCK) {
-                            break;
-                        }
-
-                        perror("accept");
+                if (client_fd == -1) {
+                    if (errno == EAGAIN || errno == EWOULDBLOCK) {
                         break;
                     }
 
-                    set_nonblocking(client_fd);
-
-                    struct epoll_event client_event;
-                    client_event.events = EPOLLIN | EPOLLET;
-                    client_event.data.fd = client_fd;
-
-                    if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, client_fd, &client_event) == -1) {
-                        perror("epoll_ctl client_fd");
-                        close(client_fd);
-                    }
-
-                    printf("Client connected: fd=%d\n", client_fd);
+                    perror("accept");
+                    break;
                 }
-            } else {
-                char buf[BUF_SIZE];
 
-                while (1) {
-                    ssize_t count = read(fd, buf, sizeof(buf));
+                set_nonblocking(client_fd);
 
-                    if (count == -1) {
-                        if (errno == EAGAIN || errno == EWOULDBLOCK) {
-                            break;
-                        }
+                struct epoll_event client_event;
+                client_event.events = EPOLLIN | EPOLLET;
+                client_event.data.fd = client_fd;
 
-                        perror("read");
-                        close(fd);
-                        break;
-                    }
-
-                    if (count == 0) {
-                        printf("[%s] Client disconnected: fd=%d\n", __func__, fd);
-                        close(fd);
-                        break;
-                    }
-
-                    write(fd, buf, count);
+                if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, client_fd, &client_event) == -1) {
+                    perror("epoll_ctl client_fd");
+                    close(client_fd);
                 }
+
+                printf("Client connected: fd=%d\n", client_fd);
+            }
+        } else {
+            char buf[BUF_SIZE];
+
+            while (1) {
+                ssize_t count = read(fd, buf, sizeof(buf));
+
+                if (count == -1) {
+                    if (errno == EAGAIN || errno == EWOULDBLOCK) {
+                        break;
+                    }
+
+                    perror("read");
+                    close(fd);
+                    break;
+                }
+
+                if (count == 0) {
+                    printf("[%s] Client disconnected: fd=%d\n", __func__, fd);
+                    close(fd);
+                    break;
+                }
+
+                write(fd, buf, count);
             }
         }
     }
-
-    close(server_fd);
-    close(epoll_fd);
+    
     return 0;
 }
