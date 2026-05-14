@@ -1,12 +1,12 @@
 CC       := gcc
 TARGET   := dinomq
 
-SRC_DIRS := src net
+SRC_DIRS := src net mqtt
 BUILD_DIR := build
 
-CPPFLAGS := $(addprefix -I,$(SRC_DIRS)) -include src/dinomq.h -Dset_nonblocking=set_socket_nonblocking
-CFLAGS   := -std=gnu11 -Wall -Wextra -Wpedantic -O2
-LDFLAGS  :=
+CPPFLAGS := $(addprefix -I,$(SRC_DIRS))
+CFLAGS   := -std=gnu11 -Wall -Wextra -Wpedantic -g -O0 -fsanitize=address,undefined
+LDFLAGS  := -fsanitize=address,undefined
 LDLIBS   :=
 
 SRCS := $(foreach dir,$(SRC_DIRS),$(wildcard $(dir)/*.c))

@@ -4,14 +4,14 @@
 #define MAX_EVENTS 64
 #define BUF_SIZE 1024
 
-static int set_socket_nonblocking(int fd) {
+static int setSocketNonblocking(int fd) {
     int flags = fcntl(fd, F_GETFL, 0);
     if (flags == -1)
         return -1;
     return fcntl(fd, F_SETFL, flags | O_NONBLOCK);
 }
 
-int init_server_socket() {
+int initServerSocket() {
     int server_fd = socket(AF_INET, SOCK_STREAM, 0);
     if (server_fd == -1) {
         perror("socket");
@@ -37,12 +37,12 @@ int init_server_socket() {
         exit(1);
     }
 
-    set_socket_nonblocking(server_fd);
+    setSocketNonblocking(server_fd);
 
     return server_fd;
 }
 
-int init_epoll(int server_fd) {
+int initEpoll(int server_fd) {
     int epoll_fd = epoll_create1(0);
     if (epoll_fd == -1) {
         perror("epoll_create1");
@@ -67,7 +67,7 @@ int init_epoll(int server_fd) {
     return epoll_fd;
 }
 
-int epoll_handler(int epoll_fd) {
+int epollHandler(int epoll_fd) {
     struct epoll_event events[MAX_EVENTS];
 
     int n = epoll_wait(epoll_fd, events, MAX_EVENTS, 100);
@@ -95,15 +95,12 @@ int epoll_handler(int epoll_fd) {
                     break;
                 }
 
-                set_nonblocking(client_fd);
+                setSocketNonblocking(client_fd);
 
-                struct MQTTClient *client = malloc(sizeof(struct MQTTClient));
+                struct MQTTClient *client = calloc(1, sizeof(struct MQTTClient));
 
                 client->fd = client_fd;
                 client->type = EV_CLIENT;
-                client->in_len = 0;
-                client->out_len = 0;
-                client->out_sent = 0;
 
                 struct epoll_event client_event;
                 client_event.events = EPOLLIN | EPOLLET;
@@ -149,6 +146,15 @@ int epoll_handler(int epoll_fd) {
                 }
 
                 client->in_len += count;
+
+                int status = parseMQTTPacket(client);
+                while (status == PACKET_PARSED) {
+                    handleMQTTMessage(client);
+                    memmove(client->inbuf, client->inbuf + client->msg.totalLength, client->in_len - client->msg.totalLength);
+                    client->in_len -= client->msg.totalLength;
+                    memset(&client->msg, 0, sizeof(MQTTMessage));
+                    status = parseMQTTPacket(client);
+                }
 
                 // count = write(client->fd, client->inbuf, client->in_len);
 

@@ -2,14 +2,14 @@
 
 void mainLoop() {
 
-    int server_fd = init_server_socket();
-    int epoll_fd = init_epoll(server_fd);
+    int server_fd = initServerSocket();
+    int epoll_fd = initEpoll(server_fd);
 
     printf("%s Hello!\n", __func__);
 
     while (1) { //change to interrupt
         sleep(1);
-        epoll_handler(epoll_fd);
+        epollHandler(epoll_fd);
     }
 
     close(server_fd);
