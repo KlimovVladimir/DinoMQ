@@ -9,7 +9,7 @@ void mainLoop() {
 
     while (1) { //change to interrupt
         sleep(1);
-        epollHandler(epoll_fd);
+        epollHandler();
     }
 
     close(server_fd);

@@ -4,6 +4,8 @@
 #define MAX_EVENTS 64
 #define BUF_SIZE 1024
 
+static int g_epoll_fd;
+
 static int setSocketNonblocking(int fd) {
     int flags = fcntl(fd, F_GETFL, 0);
     if (flags == -1)
@@ -42,12 +44,43 @@ int initServerSocket() {
     return server_fd;
 }
 
+void enableClientWrite(struct MQTTClient *client) {
+    struct epoll_event ev;
+
+    ev.events = EPOLLIN | EPOLLOUT | EPOLLET;
+    ev.data.ptr = client;
+
+    epoll_ctl(g_epoll_fd, EPOLL_CTL_MOD, client->fd, &ev);
+}
+
+void disableClientWrite(struct MQTTClient *client) {
+    struct epoll_event ev;
+
+    ev.events = EPOLLIN | EPOLLET;
+    ev.data.ptr = client;
+
+    epoll_ctl(g_epoll_fd, EPOLL_CTL_MOD, client->fd, &ev);
+}
+
+int queuePacket(struct MQTTClient *client, const uint8_t *data, size_t len) {
+    if (client->out_len + len > sizeof(client->outbuf)) {
+        return -1;
+    }
+
+    memcpy(client->outbuf + client->out_len, data, len);
+    client->out_len += len;
+
+    return 0;
+}
+
 int initEpoll(int server_fd) {
     int epoll_fd = epoll_create1(0);
     if (epoll_fd == -1) {
         perror("epoll_create1");
         exit(1);
     }
+
+    g_epoll_fd = epoll_fd;
 
     struct Connection *server = malloc(sizeof(struct Connection));
     server->type = EV_SERVER;
@@ -57,20 +90,20 @@ int initEpoll(int server_fd) {
     event.events = EPOLLIN;
     event.data.ptr = server;
 
-    if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, server->fd, &event) == -1) {
+    if (epoll_ctl(g_epoll_fd, EPOLL_CTL_ADD, server->fd, &event) == -1) {
         perror("epoll_ctl server_fd");
         exit(1);
     }
 
     printf("[%s] Server listening on port %d\n", __func__, PORT);
 
-    return epoll_fd;
+    return g_epoll_fd;
 }
 
-int epollHandler(int epoll_fd) {
+int epollHandler() {
     struct epoll_event events[MAX_EVENTS];
 
-    int n = epoll_wait(epoll_fd, events, MAX_EVENTS, 100);
+    int n = epoll_wait(g_epoll_fd, events, MAX_EVENTS, 100);
     if (n == -1) {
         perror("epoll_wait");
         return -1;
@@ -82,87 +115,113 @@ int epollHandler(int epoll_fd) {
         //int fd = events[i].data.fd;
         struct Connection *conn = events[i].data.ptr;
 
-        if (conn->type == EV_SERVER) {
-            while (1) {
-                int client_fd = accept(conn->fd, NULL, NULL);
+        if (events[i].events & EPOLLIN) {
+            if (conn->type == EV_SERVER) {
+                while (1) {
+                    int client_fd = accept(conn->fd, NULL, NULL);
 
-                if (client_fd == -1) {
-                    if (errno == EAGAIN || errno == EWOULDBLOCK) {
+                    if (client_fd == -1) {
+                        if (errno == EAGAIN || errno == EWOULDBLOCK) {
+                            break;
+                        }
+
+                        perror("accept");
                         break;
                     }
 
-                    perror("accept");
-                    break;
+                    setSocketNonblocking(client_fd);
+
+                    struct MQTTClient *client = calloc(1, sizeof(struct MQTTClient));
+
+                    client->fd = client_fd;
+                    client->type = EV_CLIENT;
+
+                    struct epoll_event client_event;
+                    client_event.events = EPOLLIN | EPOLLET;
+                    client_event.data.ptr = client;
+
+                    if (epoll_ctl(g_epoll_fd, EPOLL_CTL_ADD, client_fd, &client_event) == -1) {
+                        perror("epoll_ctl client_fd");
+                        close(client_fd);
+                        free(client);
+                    }
+
+                    printf("[%s] Client connected: fd=%d\n", __func__, client_fd);
                 }
-
-                setSocketNonblocking(client_fd);
-
-                struct MQTTClient *client = calloc(1, sizeof(struct MQTTClient));
-
-                client->fd = client_fd;
-                client->type = EV_CLIENT;
-
-                struct epoll_event client_event;
-                client_event.events = EPOLLIN | EPOLLET;
-                client_event.data.ptr = client;
-
-                if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, client_fd, &client_event) == -1) {
-                    perror("epoll_ctl client_fd");
-                    close(client_fd);
-                    free(client);
-                }
-
-                printf("[%s] Client connected: fd=%d\n", __func__, client_fd);
-            }
-        } else {
-            while (1) {
+            } else {
                 struct MQTTClient *client = (struct MQTTClient *)conn;
-
-                if (client->in_len >= sizeof(client->inbuf)) {
-                    printf("[%s] Overflow! Client disconnected: fd=%d\n", __func__, client->fd);
-                    close(client->fd);
-                    free(client);
-                    break;
-                }
-
-                ssize_t count = read(client->fd, client->inbuf + client->in_len, sizeof(client->inbuf) - client->in_len);
-                
-                if (count == -1) {
-                    if (errno == EAGAIN || errno == EWOULDBLOCK) {
+                while (1) {
+                    if (client->in_len >= sizeof(client->inbuf)) {
+                        printf("[%s] Overflow! Client disconnected: fd=%d\n", __func__, client->fd);
+                        close(client->fd);
+                        free(client);
                         break;
                     }
 
-                    perror("read");
+                    ssize_t count = read(client->fd, client->inbuf + client->in_len, sizeof(client->inbuf) - client->in_len);
+                    
+                    if (count == -1) {
+                        if (errno == EAGAIN || errno == EWOULDBLOCK) {
+                            break;
+                        }
+
+                        perror("read");
+                        close(client->fd);
+                        free(client);
+                        break;
+                    }
+
+                    if (count == 0) {
+                        printf("[%s] Client disconnected: fd=%d\n", __func__, client->fd);
+                        close(client->fd);
+                        free(client);
+                        break;
+                    }
+
+                    client->in_len += count;
+
+                    int status = parseMQTTPacket(client);
+                    while (status == PACKET_PARSED) {
+                        handleMQTTMessage(client);
+                        memmove(client->inbuf, client->inbuf + client->msg.totalLength, client->in_len - client->msg.totalLength);
+                        client->in_len -= client->msg.totalLength;
+                        memset(&client->msg, 0, sizeof(MQTTMessage));
+                        status = parseMQTTPacket(client);
+                    }
+
+                    // count = write(client->fd, client->inbuf, client->in_len);
+
+                    // if (count > 0) {
+                    //     memmove(client->inbuf, client->inbuf + count, client->in_len - count);
+                    //     client->in_len -= count;
+                    // }
+
+                }
+            }
+        }
+        else if (events[i].events & EPOLLOUT) {
+            struct MQTTClient *client = (struct MQTTClient *)conn;
+
+            while (client->out_sent < client->out_len) {
+                ssize_t count = write(client->fd, client->outbuf + client->out_sent, client->out_len - client->out_sent);
+
+                if (count == -1) {
+                    if (errno == EAGAIN || errno == EWOULDBLOCK)
+                        break;
+
+                    perror("write");
                     close(client->fd);
                     free(client);
                     break;
                 }
 
-                if (count == 0) {
-                    printf("[%s] Client disconnected: fd=%d\n", __func__, client->fd);
-                    close(client->fd);
-                    free(client);
-                    break;
-                }
+                client->out_sent += count;
+            }
 
-                client->in_len += count;
-
-                int status = parseMQTTPacket(client);
-                while (status == PACKET_PARSED) {
-                    handleMQTTMessage(client);
-                    memmove(client->inbuf, client->inbuf + client->msg.totalLength, client->in_len - client->msg.totalLength);
-                    client->in_len -= client->msg.totalLength;
-                    memset(&client->msg, 0, sizeof(MQTTMessage));
-                    status = parseMQTTPacket(client);
-                }
-
-                // count = write(client->fd, client->inbuf, client->in_len);
-
-                // if (count > 0) {
-                //     memmove(client->inbuf, client->inbuf + count, client->in_len - count);
-                //     client->in_len -= count;
-                // }
-
+            if (client->out_sent >= client->out_len) {
+                client->out_len = 0;
+                client->out_sent = 0;
+                disableClientWrite(client);
             }
         }
     }

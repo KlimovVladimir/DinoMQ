@@ -39,6 +39,9 @@ struct MQTTClient {
 
 int initServerSocket();
 int initEpoll(int server_fd);
-int epollHandler(int epoll_fd);
+int epollHandler();
+void enableClientWrite(struct MQTTClient *client);
+void disableClientWrite(struct MQTTClient *client);
+int queuePacket(struct MQTTClient *client, const uint8_t *data, size_t len);
 
 #endif //EPOLL_HANDLER_H

@@ -1,6 +1,14 @@
 #ifndef MQTT_HANDLER_H
 #define MQTT_HANDLER_H
 
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <fcntl.h>
+#include <errno.h>
+#include <netinet/in.h>
+
 #define PACKET_PARSED      1
 #define NOT_FULL_PACKET   -1
 #define PACKET_MALFORMED  -2
@@ -24,7 +32,7 @@
 #define DISCONNECT     0xE0U
 
 typedef struct FixedHeader {
-    int packetType;
+    uint8_t packetType;
     int remainingLengthVal;
     int remainingLengthSize;
 } FixedHeader;
