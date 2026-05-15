@@ -73,6 +73,68 @@ int queuePacket(struct MQTTClient *client, const uint8_t *data, size_t len) {
     return 0;
 }
 
+void closeClient(struct MQTTClient *client) {
+    if (!client)
+        return;
+
+    epoll_ctl(g_epoll_fd, EPOLL_CTL_DEL, client->fd, NULL);
+    close(client->fd);
+    free(client);
+}
+
+static void handleClientRead(struct MQTTClient *client) {
+    while (1) {
+        if (client->in_len >= sizeof(client->inbuf)) {
+            logPrint(LOG_ERR, "[%s] Overflow! Client disconnected: fd=%d\n", __func__, client->fd);
+            closeClient(client);
+            return;
+        }
+
+        ssize_t count = read(client->fd, client->inbuf + client->in_len, sizeof(client->inbuf) - client->in_len);
+        
+        if (count == -1) {
+            if (errno == EAGAIN || errno == EWOULDBLOCK) {
+                return;
+            }
+
+            perror("read");
+            closeClient(client);
+            return;
+        }
+
+        if (count == 0) {
+            logPrint(LOG_INFO, "[%s] Client disconnected: fd=%d\n", __func__, client->fd);
+            closeClient(client);
+            return;
+        }
+
+        client->in_len += count;
+
+        int status = parseMQTTPacket(client);
+        while (status == PACKET_PARSED) {
+            int session_status = handleMQTTMessage(client);
+
+            if (session_status == MQTT_CLOSE) {
+                closeClient(client);
+                return;
+            }
+
+            memmove(client->inbuf, client->inbuf + client->msg.totalLength, client->in_len - client->msg.totalLength);
+            client->in_len -= client->msg.totalLength;
+            memset(&client->msg, 0, sizeof(MQTTMessage));
+            status = parseMQTTPacket(client);
+        }
+
+        // count = write(client->fd, client->inbuf, client->in_len);
+
+        // if (count > 0) {
+        //     memmove(client->inbuf, client->inbuf + count, client->in_len - count);
+        //     client->in_len -= count;
+        // }
+
+    }
+}
+
 int initEpoll(int server_fd) {
     int epoll_fd = epoll_create1(0);
     if (epoll_fd == -1) {
@@ -150,53 +212,7 @@ int epollHandler() {
                 }
             } else {
                 struct MQTTClient *client = (struct MQTTClient *)conn;
-                while (1) {
-                    if (client->in_len >= sizeof(client->inbuf)) {
-                        logPrint(LOG_ERR, "[%s] Overflow! Client disconnected: fd=%d\n", __func__, client->fd);
-                        close(client->fd);
-                        free(client);
-                        break;
-                    }
-
-                    ssize_t count = read(client->fd, client->inbuf + client->in_len, sizeof(client->inbuf) - client->in_len);
-                    
-                    if (count == -1) {
-                        if (errno == EAGAIN || errno == EWOULDBLOCK) {
-                            break;
-                        }
-
-                        perror("read");
-                        close(client->fd);
-                        free(client);
-                        break;
-                    }
-
-                    if (count == 0) {
-                        logPrint(LOG_INFO, "[%s] Client disconnected: fd=%d\n", __func__, client->fd);
-                        close(client->fd);
-                        free(client);
-                        break;
-                    }
-
-                    client->in_len += count;
-
-                    int status = parseMQTTPacket(client);
-                    while (status == PACKET_PARSED) {
-                        handleMQTTMessage(client);
-                        memmove(client->inbuf, client->inbuf + client->msg.totalLength, client->in_len - client->msg.totalLength);
-                        client->in_len -= client->msg.totalLength;
-                        memset(&client->msg, 0, sizeof(MQTTMessage));
-                        status = parseMQTTPacket(client);
-                    }
-
-                    // count = write(client->fd, client->inbuf, client->in_len);
-
-                    // if (count > 0) {
-                    //     memmove(client->inbuf, client->inbuf + count, client->in_len - count);
-                    //     client->in_len -= count;
-                    // }
-
-                }
+                handleClientRead(client);
             }
         }
         else if (events[i].events & EPOLLOUT) {
@@ -210,8 +226,7 @@ int epollHandler() {
                         break;
 
                     perror("write");
-                    close(client->fd);
-                    free(client);
+                    closeClient(client);
                     break;
                 }
 

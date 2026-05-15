@@ -44,5 +44,6 @@ int epollHandler();
 void enableClientWrite(struct MQTTClient *client);
 void disableClientWrite(struct MQTTClient *client);
 int queuePacket(struct MQTTClient *client, const uint8_t *data, size_t len);
+void closeClient(struct MQTTClient *client);
 
 #endif //EPOLL_HANDLER_H

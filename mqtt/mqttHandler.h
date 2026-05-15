@@ -14,6 +14,9 @@
 #define NOT_FULL_PACKET   -1
 #define PACKET_MALFORMED  -2
 
+#define MQTT_OK            0
+#define MQTT_CLOSE        -1
+
 
 /* Control packet types */
 #define RESERVED       0x00U
@@ -32,6 +35,14 @@
 #define PINGRESP       0xD0U
 #define DISCONNECT     0xE0U
 
+/* Connect Return code values */
+#define CONN_ACCEPTED              0x00U
+#define CONN_REFUSED_PROTOCOL      0x01U
+#define CONN_ACCEPTED_IDENTIFIER   0x02U
+#define CONN_ACCEPTED_UNAVALIABLE  0x03U
+#define CONN_ACCEPTED_BADUSERPASS  0x04U
+#define CONN_ACCEPTED_NOTAUTH      0x05U
+
 typedef struct FixedHeader {
     uint8_t packetType;
     int remainingLengthVal;
@@ -46,8 +57,8 @@ typedef struct MQTTMessage {
 struct MQTTClient;
 
 int parseMQTTPacket(struct MQTTClient *client);
-void handleMQTTMessage(struct MQTTClient *client);
-void handleMQTTConnect(struct MQTTClient *client);
-void handleMQTTPingReq(struct MQTTClient *client);
+int handleMQTTMessage(struct MQTTClient *client);
+int handleMQTTConnect(struct MQTTClient *client);
+int handleMQTTPingReq(struct MQTTClient *client);
 
 #endif //MQTT_HANDLER_H

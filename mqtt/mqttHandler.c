@@ -35,18 +35,20 @@ int parseMQTTPacket(struct MQTTClient *client) {
     return PACKET_PARSED;
 }
 
-void handleMQTTConnect(struct MQTTClient *client) {
+int handleMQTTConnect(struct MQTTClient *client) {
+    uint8_t connack[] = {CONNACK, 0x02, 0x00, CONN_ACCEPTED};
+
     size_t pos = 1 + client->msg.fHeader.remainingLengthSize;
     uint16_t protoLength = (client->inbuf[pos] << 8) | client->inbuf[pos + 1];
     pos += 2;
     
     char protocolName[5];
-    strncpy(protocolName, &client->inbuf[pos], 4);
+    strncpy(protocolName, &client->inbuf[pos], protoLength);
     protocolName[4] = '\0';
     pos += protoLength;
 
     if (strcmp(protocolName, "MQTT") != 0) {
-
+        connack[3] = CONN_REFUSED_PROTOCOL;
     }
 
     uint8_t version = client->inbuf[pos++];
@@ -61,30 +63,28 @@ void handleMQTTConnect(struct MQTTClient *client) {
     clientID[clientIDLength] = '\0';
     pos += clientIDLength;
 
-
-    uint8_t connack[] = {CONNACK, 0x02, 0x00, 0x00};
-
     if (queuePacket(client, connack, sizeof(connack)) == -1) {
-        close(client->fd);
-        return;
+        return MQTT_CLOSE;
     }
 
     enableClientWrite(client);
+
+    return MQTT_OK;
 }
 
-void handleMQTTPingReq(struct MQTTClient *client) {
+int handleMQTTPingReq(struct MQTTClient *client) {
     uint8_t pingResp[] = {PINGRESP, 0x00};
 
     if (queuePacket(client, pingResp, sizeof(pingResp)) == -1) {
-        close(client->fd);
-        return;
+        return MQTT_CLOSE;
     }
 
     enableClientWrite(client);
+    return MQTT_OK;
 }
 
-
-void handleMQTTMessage(struct MQTTClient *client) {
+int handleMQTTMessage(struct MQTTClient *client) {
+    int status = MQTT_OK;
     uint8_t command = client->msg.fHeader.packetType & 0xF0;
     uint8_t flags = client->msg.fHeader.packetType & 0x0F;
 
@@ -96,7 +96,7 @@ void handleMQTTMessage(struct MQTTClient *client) {
 
         case CONNECT:
             logPrint(LOG_INFO, "[%s] Handle CONNECT: fd=%d\n", __func__, client->fd);
-            handleMQTTConnect(client);
+            status = handleMQTTConnect(client);
             break;
 
         case CONNACK:
@@ -141,7 +141,7 @@ void handleMQTTMessage(struct MQTTClient *client) {
 
         case PINGREQ:
             logPrint(LOG_INFO, "[%s] Handle PINGREQ: fd=%d\n", __func__, client->fd);
-            handleMQTTPingReq(client);
+            status = handleMQTTPingReq(client);
             break;
 
         case PINGRESP:
@@ -150,10 +150,13 @@ void handleMQTTMessage(struct MQTTClient *client) {
 
         case DISCONNECT:
             logPrint(LOG_INFO, "[%s] Handle DISCONNECT: fd=%d\n", __func__, client->fd);
+            status = MQTT_CLOSE;
             break;
 
         default:
             logPrint(LOG_INFO, "[%s] Unknown packet: 0x%02X fd=%d\n", __func__, command, client->fd);
             break;
     }
+    
+    return status;
 }
