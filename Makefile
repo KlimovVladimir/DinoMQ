@@ -5,7 +5,7 @@ SRC_DIRS := src net mqtt
 BUILD_DIR := build
 
 CPPFLAGS := $(addprefix -I,$(SRC_DIRS))
-CFLAGS   := -std=gnu11 -Wall -Wextra -Wpedantic -g -O0 -fsanitize=address,undefined
+CFLAGS   := -std=gnu11 -Wall -g -O0 -fsanitize=address,undefined
 LDFLAGS  := -fsanitize=address,undefined
 LDLIBS   :=
 
