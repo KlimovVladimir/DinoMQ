@@ -8,6 +8,7 @@
 #include <fcntl.h>
 #include <errno.h>
 #include <netinet/in.h>
+#include "log.h"
 
 #define PACKET_PARSED      1
 #define NOT_FULL_PACKET   -1

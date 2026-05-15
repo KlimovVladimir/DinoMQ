@@ -91,69 +91,69 @@ void handleMQTTMessage(struct MQTTClient *client) {
     switch (command)
     {
         case RESERVED:
-            printf("[%s] Handle RESERVED: fd=%d\n", __func__, client->fd);
+            logPrint(LOG_INFO, "[%s] Handle RESERVED: fd=%d\n", __func__, client->fd);
             break;
 
         case CONNECT:
-            printf("[%s] Handle CONNECT: fd=%d\n", __func__, client->fd);
+            logPrint(LOG_INFO, "[%s] Handle CONNECT: fd=%d\n", __func__, client->fd);
             handleMQTTConnect(client);
             break;
 
         case CONNACK:
-            printf("[%s] Handle CONNACK: fd=%d\n", __func__, client->fd);
+            logPrint(LOG_INFO, "[%s] Handle CONNACK: fd=%d\n", __func__, client->fd);
             break;
 
         case PUBLISH:
-            printf("[%s] Handle PUBLISH: fd=%d\n", __func__, client->fd);
+            logPrint(LOG_INFO, "[%s] Handle PUBLISH: fd=%d\n", __func__, client->fd);
             break;
 
         case PUBACK:
-            printf("[%s] Handle PUBACK: fd=%d\n", __func__, client->fd);
+            logPrint(LOG_INFO, "[%s] Handle PUBACK: fd=%d\n", __func__, client->fd);
             break;
 
         case PUBREC:
-            printf("[%s] Handle PUBREC: fd=%d\n", __func__, client->fd);
+            logPrint(LOG_INFO, "[%s] Handle PUBREC: fd=%d\n", __func__, client->fd);
             break;
 
         case PUBREL:
-            printf("[%s] Handle PUBREL: fd=%d\n", __func__, client->fd);
+            logPrint(LOG_INFO, "[%s] Handle PUBREL: fd=%d\n", __func__, client->fd);
             break;
 
         case PUBCOMP:
-            printf("[%s] Handle PUBCOMP: fd=%d\n", __func__, client->fd);
+            logPrint(LOG_INFO, "[%s] Handle PUBCOMP: fd=%d\n", __func__, client->fd);
             break;
 
         case SUBSCRIBE:
-            printf("[%s] Handle SUBSCRIBE: fd=%d\n", __func__, client->fd);
+            logPrint(LOG_INFO, "[%s] Handle SUBSCRIBE: fd=%d\n", __func__, client->fd);
             break;
 
         case SUBACK:
-            printf("[%s] Handle SUBACK: fd=%d\n", __func__, client->fd);
+            logPrint(LOG_INFO, "[%s] Handle SUBACK: fd=%d\n", __func__, client->fd);
             break;
 
         case UNSUBSCRIBE:
-            printf("[%s] Handle UNSUBSCRIBE: fd=%d\n", __func__, client->fd);
+            logPrint(LOG_INFO, "[%s] Handle UNSUBSCRIBE: fd=%d\n", __func__, client->fd);
             break;
 
         case UNSUBACK:
-            printf("[%s] Handle UNSUBACK: fd=%d\n", __func__, client->fd);
+            logPrint(LOG_INFO, "[%s] Handle UNSUBACK: fd=%d\n", __func__, client->fd);
             break;
 
         case PINGREQ:
-            printf("[%s] Handle PINGREQ: fd=%d\n", __func__, client->fd);
+            logPrint(LOG_INFO, "[%s] Handle PINGREQ: fd=%d\n", __func__, client->fd);
             handleMQTTPingReq(client);
             break;
 
         case PINGRESP:
-            printf("[%s] Handle PINGRESP: fd=%d\n", __func__, client->fd);
+            logPrint(LOG_INFO, "[%s] Handle PINGRESP: fd=%d\n", __func__, client->fd);
             break;
 
         case DISCONNECT:
-            printf("[%s] Handle DISCONNECT: fd=%d\n", __func__, client->fd);
+            logPrint(LOG_INFO, "[%s] Handle DISCONNECT: fd=%d\n", __func__, client->fd);
             break;
 
         default:
-            printf("[%s] Unknown packet: 0x%02X fd=%d\n", __func__, command, client->fd);
+            logPrint(LOG_INFO, "[%s] Unknown packet: 0x%02X fd=%d\n", __func__, command, client->fd);
             break;
     }
 }

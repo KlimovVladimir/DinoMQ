@@ -12,6 +12,7 @@
 #include <sys/epoll.h>
 
 #include "mqttHandler.h"
+#include "log.h"
 
 #define INBUF_SIZE      8192
 #define OUTBUF_SIZE     8192

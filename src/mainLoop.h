@@ -3,6 +3,7 @@
 
 #include <stdio.h>
 #include "epollHandler.h"
+#include "log.h"
 
 void mainLoop();
 

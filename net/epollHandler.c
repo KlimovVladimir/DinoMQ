@@ -95,7 +95,7 @@ int initEpoll(int server_fd) {
         exit(1);
     }
 
-    printf("[%s] Server listening on port %d\n", __func__, PORT);
+    logPrint(LOG_INFO, "[%s] Server listening on port %d\n", __func__, PORT);
 
     return g_epoll_fd;
 }
@@ -146,13 +146,13 @@ int epollHandler() {
                         free(client);
                     }
 
-                    printf("[%s] Client connected: fd=%d\n", __func__, client_fd);
+                    logPrint(LOG_INFO, "[%s] Client connected: fd=%d\n", __func__, client_fd);
                 }
             } else {
                 struct MQTTClient *client = (struct MQTTClient *)conn;
                 while (1) {
                     if (client->in_len >= sizeof(client->inbuf)) {
-                        printf("[%s] Overflow! Client disconnected: fd=%d\n", __func__, client->fd);
+                        logPrint(LOG_ERR, "[%s] Overflow! Client disconnected: fd=%d\n", __func__, client->fd);
                         close(client->fd);
                         free(client);
                         break;
@@ -172,7 +172,7 @@ int epollHandler() {
                     }
 
                     if (count == 0) {
-                        printf("[%s] Client disconnected: fd=%d\n", __func__, client->fd);
+                        logPrint(LOG_INFO, "[%s] Client disconnected: fd=%d\n", __func__, client->fd);
                         close(client->fd);
                         free(client);
                         break;
