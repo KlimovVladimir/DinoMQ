@@ -46,5 +46,7 @@ struct MQTTClient;
 
 int parseMQTTPacket(struct MQTTClient *client);
 void handleMQTTMessage(struct MQTTClient *client);
+void handleMQTTConnect(struct MQTTClient *client);
+void handleMQTTPingReq(struct MQTTClient *client);
 
 #endif //MQTT_HANDLER_H

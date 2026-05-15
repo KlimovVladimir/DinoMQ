@@ -72,6 +72,17 @@ void handleMQTTConnect(struct MQTTClient *client) {
     enableClientWrite(client);
 }
 
+void handleMQTTPingReq(struct MQTTClient *client) {
+    uint8_t pingResp[] = {PINGRESP, 0x00};
+
+    if (queuePacket(client, pingResp, sizeof(pingResp)) == -1) {
+        close(client->fd);
+        return;
+    }
+
+    enableClientWrite(client);
+}
+
 
 void handleMQTTMessage(struct MQTTClient *client) {
     uint8_t command = client->msg.fHeader.packetType & 0xF0;
@@ -130,6 +141,7 @@ void handleMQTTMessage(struct MQTTClient *client) {
 
         case PINGREQ:
             printf("[%s] Handle PINGREQ: fd=%d\n", __func__, client->fd);
+            handleMQTTPingReq(client);
             break;
 
         case PINGRESP:
